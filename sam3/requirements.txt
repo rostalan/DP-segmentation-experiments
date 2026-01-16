@@ -1,0 +1,13 @@
+# YOLO11-World + SAM3 Hybrid Pipeline Dependencies
+# Open-vocabulary detection + high-quality segmentation
+
+opencv-python>=4.8.0
+numpy>=1.24.0,<2.0.0
+PyYAML>=6.0
+torch>=2.0.0
+torchvision>=0.15.0
+ultralytics>=8.3.0
+
+# SAM3 from HuggingFace (requires dev version)
+# Install with: pip install git+https://github.com/huggingface/transformers.git
+transformers>=5.0.0

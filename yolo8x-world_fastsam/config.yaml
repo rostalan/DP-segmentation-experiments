@@ -1,0 +1,71 @@
+# YOLO-World + FastSAM Configuration
+# ===================================
+# Fast zero-shot segmentation using YOLO-World + FastSAM
+# FastSAM is ~50x faster than SAM while maintaining good quality
+
+# Paths
+paths:
+  yolo_model: "../models/yolov8m-worldv2.pt"    # YOLO-World for detection
+  fastsam_model: "../models/FastSAM-x.pt"       # FastSAM model
+  input_video: "../res/videos/VID1.mkv"
+  output_dir: "output/frames"
+
+# Frame Sampling
+sampling:
+  frame_interval: 15            # Process every Nth frame
+  start_frame: 0                # First frame to process
+  max_frames: null              # Maximum frames to process (null = all)
+
+# YOLO-World Detection Settings
+yolo:
+  confidence_threshold: 0.25    # Minimum confidence for detections
+  iou_threshold: 0.5            # IoU threshold for NMS
+
+# FastSAM Settings
+fastsam:
+  conf: 0.4                     # Confidence threshold
+  iou: 0.9                      # IoU threshold for mask NMS
+  retina_masks: true            # High-quality masks
+
+# Inference Settings
+inference:
+  device: "auto"                 # "auto", "cpu", "cuda"
+
+# Tracking Settings
+tracking:
+  enabled: false                 # Enable IoU-based tracking
+  iou_threshold: 0.3            # Min IoU to match detection to track
+  max_age: 3                    # Max frames to keep track without detection
+  min_hits: 1                   # Min detections before track is confirmed
+
+# Output Settings
+output:
+  save_overlay: true            # Save RGB with mask overlay
+  save_panoptic_mask: true      # Save panoptic segmentation mask
+  save_instance_mask: true      # Save instance ID mask
+  overlay_alpha: 0.6            # Mask overlay transparency
+  show_labels: true             # Draw class labels
+  show_confidence: false        # Show confidence scores
+  show_track_id: true           # Show track IDs
+  image_format: "png"           # Output format
+
+# Custom classes to detect (open-vocabulary)
+class_names:
+  - person
+  - laptop
+  - laptop battery
+
+# Colors for visualization (BGR format)
+colors:
+  - [230, 25, 75]     # Red
+  - [60, 180, 75]     # Green
+  - [255, 225, 25]    # Yellow
+  - [0, 130, 200]     # Blue
+  - [245, 130, 48]    # Orange
+  - [145, 30, 180]    # Purple
+  - [70, 240, 240]    # Cyan
+  - [240, 50, 230]    # Magenta
+  - [210, 245, 60]    # Lime
+  - [250, 190, 212]   # Pink
+  - [0, 128, 128]     # Teal
+  - [220, 190, 255]   # Lavender

@@ -1,0 +1,83 @@
+# Zero-Shot Segmentation Configuration (YOLO-World + SAM)
+# ======================================================
+# This approach allows detecting ANY class by text description!
+
+# Paths
+paths:
+  yolo_model: "../models/yolov8x-worldv2.pt"
+  sam_model: "../models/sam2.1_t.pt"
+  input_video: "../res/videos/VID1.mkv"
+  output_dir: "output/frames"
+
+# Frame Sampling
+sampling:
+  frame_interval: 10            # Process every Nth frame
+  start_frame: 180                # First frame to process
+  max_frames: null              # Maximum frames to process (null = all)
+
+# YOLO-World Settings
+yolo:
+  confidence_threshold: 0.25     # Minimum confidence for detections
+  iou_threshold: 0.10           # IoU threshold for NMS
+
+# SAM Settings
+sam:
+  points_per_side: null         # For automatic mask generation (null = use boxes only)
+  pred_iou_thresh: 0.88         # Predicted IoU threshold
+  stability_score_thresh: 0.95  # Stability score threshold
+
+# Inference Settings
+inference:
+  device: "auto"                # "auto", "cpu", "cuda", or "mps"
+
+# Tracking Settings (for temporal consistency)
+tracking:
+  enabled: true
+  iou_threshold: 0.3            # Min IoU to match detection to track
+  max_age: 3                    # Max frames to keep track without detection
+  min_hits: 1                   # Min detections before track is confirmed
+
+# Output Settings
+output:
+  save_overlay: true            # Save RGB with mask overlay
+  save_panoptic_mask: true      # Save panoptic segmentation mask (colored)
+  save_instance_mask: true      # Save instance ID mask (grayscale)
+  overlay_alpha: 0.6            # Mask overlay transparency (0-1)
+  show_labels: true             # Draw class labels
+  show_confidence: false        # Show confidence scores
+  image_format: "png"           # Output format (png, jpg)
+
+# =============================================================================
+# CUSTOM CLASSES - Add any classes you want to detect here!
+# =============================================================================
+# Unlike fixed COCO classes, you can specify ANY object by text description.
+# Examples: "screwdriver", "circuit board", "USB cable", "red button", etc.
+#
+# The model will attempt to detect these objects based on text understanding.
+# More specific descriptions often work better than generic ones.
+# =============================================================================
+class_names:
+  - person
+  - black and white laptop
+  - long black laptop battery
+
+# Colors for visualization (BGR format)
+# Add more colors if you have many classes
+colors:
+  - [230, 25, 75]     # Red
+  - [60, 180, 75]     # Green
+  - [255, 225, 25]    # Yellow
+  - [0, 130, 200]     # Blue
+  - [245, 130, 48]    # Orange
+  - [145, 30, 180]    # Purple
+  - [70, 240, 240]    # Cyan
+  - [240, 50, 230]    # Magenta
+  - [210, 245, 60]    # Lime
+  - [250, 190, 212]   # Pink
+  - [0, 128, 128]     # Teal
+  - [220, 190, 255]   # Lavender
+  - [170, 110, 40]    # Brown
+  - [255, 250, 200]   # Beige
+  - [128, 0, 0]       # Maroon
+  - [170, 255, 195]   # Mint
+

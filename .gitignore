@@ -1,0 +1,29 @@
+# Virtual Environments
+venv/
+.env/
+*/venv/
+
+# Models and Resources
+models/
+res/
+*.pt
+*.pth
+*.onnx
+*.ts
+
+# Outputs and Logs
+output/
+*/output/
+runs/
+*/runs/
+
+# Python
+__pycache__/
+*.pyc
+
+# IDE
+.vscode/
+.idea/
+.cursor/
+terminals/
+

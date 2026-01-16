@@ -1,0 +1,64 @@
+# YOLOE Text-Prompted Segmentation Configuration
+# ===============================================
+# Uses YOLOE with text prompts (RepRTA) for detection + segmentation
+
+# Paths
+paths:
+  model: "../models/yoloe-26x-seg.pt"
+  input_video: "../res/videos/VID1.mkv"
+  output_dir: "output/frames"
+
+# Frame Sampling
+sampling:
+  frame_interval: 15            # Process every Nth frame
+  start_frame: 0                # First frame to process
+  max_frames: 10                # Maximum frames to process (null = all)
+
+# Inference Settings
+inference:
+  device: "cpu"                 # "auto", "cpu", "cuda"
+  confidence_threshold: 0.25    # Minimum confidence for detections
+  iou_threshold: 0.5           # IoU threshold for NMS (low = less aggressive)
+
+# Text prompts - classes to detect (open-vocabulary)
+class_names:
+  - person
+  - laptop
+  - laptop battery
+
+# Tracking Settings (for temporal consistency)
+tracking:
+  enabled: false                # Enable IoU-based tracking
+  iou_threshold: 0.3            # Min IoU to match detection to track
+  max_age: 3                    # Max frames to keep track without detection
+  min_hits: 1                   # Min detections before track is confirmed
+
+# Output Settings
+output:
+  save_overlay: true            # Save RGB with mask overlay
+  save_panoptic_mask: true      # Save panoptic segmentation mask (colored)
+  save_instance_mask: true      # Save instance ID mask (grayscale)
+  overlay_alpha: 0.6            # Mask overlay transparency (0-1)
+  show_labels: true             # Draw class labels
+  show_confidence: false        # Show confidence scores
+  show_boxes: false             # Draw bounding boxes
+  image_format: "png"           # Output format (png, jpg)
+
+# Colors for visualization (BGR format) - enough for many classes
+colors:
+  - [230, 25, 75]     # Red
+  - [60, 180, 75]     # Green
+  - [255, 225, 25]    # Yellow
+  - [0, 130, 200]     # Blue
+  - [245, 130, 48]    # Orange
+  - [145, 30, 180]    # Purple
+  - [70, 240, 240]    # Cyan
+  - [240, 50, 230]    # Magenta
+  - [210, 245, 60]    # Lime
+  - [250, 190, 212]   # Pink
+  - [0, 128, 128]     # Teal
+  - [220, 190, 255]   # Lavender
+  - [170, 110, 40]    # Brown
+  - [255, 250, 200]   # Beige
+  - [128, 0, 0]       # Maroon
+  - [170, 255, 195]   # Mint

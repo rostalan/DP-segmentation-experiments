@@ -1,0 +1,65 @@
+# SAM2-Only Video Segmentation Configuration
+# ===========================================
+# Uses SAM2 for automatic segmentation (no detection model)
+# SAM2 segments ALL objects in the image automatically
+
+# Paths
+paths:
+  sam_model: "../models/sam2.1_b.pt"    # SAM2.1 base model
+  input_video: "../res/videos/VID1.mkv"
+  output_dir: "output/frames"
+
+# Frame Sampling
+sampling:
+  frame_interval: 15            # Process every Nth frame
+  start_frame: 0                # First frame to process
+  max_frames: null              # Maximum frames to process (null = all)
+
+# SAM2 Settings
+sam2:
+  points_per_side: 16           # Grid density (16x16=256 points, faster than 32x32=1024)
+  pred_iou_thresh: 0.88         # Predicted IoU threshold
+  stability_score_thresh: 0.95  # Stability score threshold
+  min_mask_region_area: 500     # Minimum mask area (filter tiny masks)
+
+# Inference Settings
+inference:
+  device: "auto"                # "auto", "cpu", "cuda"
+  imgsz: 640                    # Resize to this size (320 is much faster on CPU)
+
+# Tracking Settings
+tracking:
+  enabled: true                 # Enable IoU-based tracking
+  iou_threshold: 0.3            # Min IoU to match detection to track
+  max_age: 3                    # Max frames to keep track without detection
+
+# Output Settings
+output:
+  save_overlay: true            # Save RGB with mask overlay
+  save_panoptic_mask: true      # Save panoptic segmentation mask
+  save_instance_mask: true      # Save instance ID mask
+  overlay_alpha: 0.6            # Mask overlay transparency
+  show_labels: false            # No class labels (SAM2 doesn't classify)
+  show_confidence: false        # Show confidence scores
+  show_track_id: true           # Show track IDs
+  image_format: "png"           # Output format
+
+# Colors for visualization (BGR format)
+colors:
+  - [230, 25, 75]     # Red
+  - [60, 180, 75]     # Green
+  - [255, 225, 25]    # Yellow
+  - [0, 130, 200]     # Blue
+  - [245, 130, 48]    # Orange
+  - [145, 30, 180]    # Purple
+  - [70, 240, 240]    # Cyan
+  - [240, 50, 230]    # Magenta
+  - [210, 245, 60]    # Lime
+  - [250, 190, 212]   # Pink
+  - [0, 128, 128]     # Teal
+  - [220, 190, 255]   # Lavender
+  - [170, 110, 40]    # Brown
+  - [255, 250, 200]   # Beige
+  - [128, 0, 0]       # Maroon
+  - [170, 255, 195]   # Mint
+
