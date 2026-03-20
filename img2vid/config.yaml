@@ -1,0 +1,17 @@
+# Image sequence to video
+
+paths:
+  input_dir: "res"
+  output_video: "output/output.mp4"
+
+video:
+  fps: 30.0
+  codec: "mp4v"  # options: mp4v, avc1, XVID, etc.
+  width: null    # null to use input image width
+  height: null   # null to use input image height
+  resize: false  # set to true to force resize to width/height
+
+processing:
+  glob_pattern: "*.jpg"  # Pattern to match image files (e.g., *.png, frame_*.jpg)
+  sort_numerical: true   # improved sorting for numbered files (frame_1.jpg vs frame_10.jpg)
+  repeat_frames: 5       # Number of times to repeat each input frame in the video (1 = normal speed)

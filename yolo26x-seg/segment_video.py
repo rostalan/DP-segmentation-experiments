@@ -8,160 +8,16 @@ Processes selected frames from input video and generates panoptic segmentation o
 import cv2
 import numpy as np
 import onnxruntime as ort
-import yaml
 from pathlib import Path
-from dataclasses import dataclass
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from lib.config import load_config, merge_global_config, get_colors
+from lib.detection import Detection, Track, compute_iou
+from lib.tracker import SimpleTracker
+from lib.visualizer import Visualizer
+
 from typing import List, Tuple, Optional
 import time
-
-
-@dataclass
-class Detection:
-    """Represents a single detection with mask."""
-    bbox: np.ndarray       # [x1, y1, x2, y2]
-    confidence: float
-    class_id: int
-    instance_id: int       # Unique instance ID for panoptic segmentation
-    mask: np.ndarray       # Binary mask at original resolution
-    track_id: int = -1     # Persistent track ID across frames
-
-
-@dataclass 
-class Track:
-    """Represents a tracked object across frames."""
-    track_id: int
-    bbox: np.ndarray
-    class_id: int
-    mask: np.ndarray
-    confidence: float
-    age: int = 0           # Frames since track was created
-    hits: int = 1          # Number of frames with detections
-    misses: int = 0        # Consecutive frames without detection
-
-
-class SimpleTracker:
-    """IoU-based tracker for temporal consistency."""
-    
-    def __init__(self, config: dict):
-        tracking_cfg = config.get('tracking', {})
-        self.iou_threshold = tracking_cfg.get('iou_threshold', 0.3)
-        self.max_age = tracking_cfg.get('max_age', 5)  # Max frames to keep lost track
-        self.min_hits = tracking_cfg.get('min_hits', 1)  # Min hits before track is confirmed
-        
-        self.tracks: List[Track] = []
-        self.next_track_id = 1
-    
-    def _compute_iou(self, box1: np.ndarray, box2: np.ndarray) -> float:
-        """Compute IoU between two boxes [x1, y1, x2, y2]."""
-        x1 = max(box1[0], box2[0])
-        y1 = max(box1[1], box2[1])
-        x2 = min(box1[2], box2[2])
-        y2 = min(box1[3], box2[3])
-        
-        inter = max(0, x2 - x1) * max(0, y2 - y1)
-        area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
-        area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
-        union = area1 + area2 - inter
-        
-        return inter / union if union > 0 else 0
-    
-    def _compute_iou_matrix(self, detections: List[Detection]) -> np.ndarray:
-        """Compute IoU matrix between tracks and detections."""
-        if not self.tracks or not detections:
-            return np.zeros((len(self.tracks), len(detections)))
-        
-        iou_matrix = np.zeros((len(self.tracks), len(detections)))
-        for i, track in enumerate(self.tracks):
-            for j, det in enumerate(detections):
-                # Only match same class
-                if track.class_id == det.class_id:
-                    iou_matrix[i, j] = self._compute_iou(track.bbox, det.bbox)
-        return iou_matrix
-    
-    def update(self, detections: List[Detection]) -> List[Detection]:
-        """Update tracks with new detections and return tracked detections."""
-        # Compute IoU matrix
-        iou_matrix = self._compute_iou_matrix(detections)
-        
-        # Greedy matching
-        matched_tracks = set()
-        matched_dets = set()
-        matches = []
-        
-        if iou_matrix.size > 0:
-            # Sort by IoU descending
-            while True:
-                max_iou = iou_matrix.max()
-                if max_iou < self.iou_threshold:
-                    break
-                
-                idx = np.unravel_index(iou_matrix.argmax(), iou_matrix.shape)
-                track_idx, det_idx = idx
-                
-                matches.append((track_idx, det_idx))
-                matched_tracks.add(track_idx)
-                matched_dets.add(det_idx)
-                
-                # Invalidate row and column
-                iou_matrix[track_idx, :] = 0
-                iou_matrix[:, det_idx] = 0
-        
-        # Update matched tracks
-        for track_idx, det_idx in matches:
-            track = self.tracks[track_idx]
-            det = detections[det_idx]
-            track.bbox = det.bbox
-            track.mask = det.mask
-            track.confidence = det.confidence
-            track.hits += 1
-            track.misses = 0
-            track.age += 1
-        
-        # Update unmatched tracks (increment misses) - do this BEFORE adding new tracks
-        num_existing_tracks = len(self.tracks)
-        for track_idx in range(num_existing_tracks):
-            if track_idx not in matched_tracks:
-                self.tracks[track_idx].misses += 1
-                self.tracks[track_idx].age += 1
-        
-        # Create new tracks for unmatched detections
-        for det_idx, det in enumerate(detections):
-            if det_idx not in matched_dets:
-                new_track = Track(
-                    track_id=self.next_track_id,
-                    bbox=det.bbox,
-                    class_id=det.class_id,
-                    mask=det.mask,
-                    confidence=det.confidence
-                )
-                self.tracks.append(new_track)
-                self.next_track_id += 1
-        
-        # Remove dead tracks
-        self.tracks = [t for t in self.tracks if t.misses <= self.max_age]
-        
-        # Build output detections from confirmed tracks
-        # Include tracks that are "coasting" (recently lost but within max_age)
-        output_detections = []
-        for track in self.tracks:
-            if track.hits >= self.min_hits:
-                # Fade confidence for coasting tracks
-                adjusted_conf = track.confidence * (0.9 ** track.misses)
-                output_detections.append(Detection(
-                    bbox=track.bbox,
-                    confidence=adjusted_conf,
-                    class_id=track.class_id,
-                    instance_id=track.track_id,
-                    mask=track.mask,
-                    track_id=track.track_id
-                ))
-        
-        return output_detections
-    
-    def reset(self):
-        """Reset tracker state."""
-        self.tracks = []
-        self.next_track_id = 1
 
 
 class YOLOPanopticSegmenter:
@@ -169,7 +25,9 @@ class YOLOPanopticSegmenter:
     
     def __init__(self, config: dict):
         self.config = config
-        self.model_path = config['paths']['model']
+        self.model_path = config['paths'].get(
+            'model', config['paths'].get('yolo26_onnx', '../models/yolo26x-seg.onnx')
+        )
         self.input_size = config['model']['input_size']
         self.conf_thresh = config['model']['confidence_threshold']
         self.iou_thresh = config['model']['iou_threshold']
@@ -275,12 +133,14 @@ class YOLOPanopticSegmenter:
                 mask = np.zeros((orig_h, orig_w), dtype=np.uint8)
                 mask[int(y1):int(y2), int(x1):int(x2)] = 1
             
+            class_name = self.class_names[class_id] if class_id < len(self.class_names) else f"cls_{class_id}"
             detections.append(Detection(
                 bbox=np.array([x1, y1, x2, y2]),
                 confidence=confidence,
+                mask=mask,
                 class_id=class_id,
+                class_name=class_name,
                 instance_id=instance_counter,
-                mask=mask
             ))
             instance_counter += 1
         
@@ -373,87 +233,17 @@ class YOLOPanopticSegmenter:
         return self.postprocess(outputs, orig_shape, scale, padding)
 
 
-class PanopticVisualizer:
-    """Generate panoptic segmentation visualizations."""
-    
-    def __init__(self, config: dict):
-        self.colors = [tuple(c) for c in config.get('colors', [(255, 0, 0)])]
-        self.alpha = config['output']['overlay_alpha']
-        self.show_labels = config['output']['show_labels']
-        self.show_confidence = config['output']['show_confidence']
-        self.class_names = config.get('class_names', [])
-    
-    def _get_instance_color(self, class_id: int, instance_id: int) -> Tuple[int, int, int]:
-        """Generate unique color for each instance."""
-        base_color = self.colors[class_id % len(self.colors)]
-        # Add variation based on instance ID
-        offset = (instance_id * 37) % 60 - 30
-        return tuple(max(0, min(255, c + offset)) for c in base_color)
-    
-    def create_overlay(self, image: np.ndarray, detections: List[Detection]) -> np.ndarray:
-        """Create RGB image with mask overlay and labels."""
-        output = image.copy()
-        overlay = image.copy()
-        
-        for det in detections:
-            color = self._get_instance_color(det.class_id, det.instance_id)
-            mask_bool = det.mask.astype(bool)
-            overlay[mask_bool] = color
-            
-            if self.show_labels:
-                x1, y1 = det.bbox[:2].astype(int)
-                name = self.class_names[det.class_id] if det.class_id < len(self.class_names) else f"cls_{det.class_id}"
-                label = f"{name}: {det.confidence:.2f}" if self.show_confidence else name
-                
-                (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-                cv2.rectangle(output, (x1, y1 - th - 6), (x1 + tw + 4, y1), color, -1)
-                cv2.putText(output, label, (x1 + 2, y1 - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        
-        return cv2.addWeighted(overlay, self.alpha, output, 1 - self.alpha, 0)
-    
-    def create_panoptic_mask(self, shape: Tuple[int, int], detections: List[Detection]) -> np.ndarray:
-        """Create colored panoptic segmentation mask."""
-        h, w = shape
-        panoptic = np.zeros((h, w, 3), dtype=np.uint8)
-        
-        # Sort by area (largest first) so smaller objects appear on top
-        sorted_dets = sorted(detections, key=lambda d: d.mask.sum(), reverse=True)
-        
-        for det in sorted_dets:
-            color = self._get_instance_color(det.class_id, det.instance_id)
-            panoptic[det.mask.astype(bool)] = color
-        
-        return panoptic
-    
-    def create_instance_mask(self, shape: Tuple[int, int], detections: List[Detection]) -> np.ndarray:
-        """Create instance ID mask (each instance has unique grayscale value)."""
-        h, w = shape
-        instance_mask = np.zeros((h, w), dtype=np.uint16)
-        
-        sorted_dets = sorted(detections, key=lambda d: d.mask.sum(), reverse=True)
-        
-        for det in sorted_dets:
-            # Encode class_id and instance_id: class_id * 256 + instance_id
-            # This fits in uint16 (max 65535) for up to 255 classes and 255 instances
-            pixel_value = min(det.class_id, 255) * 256 + min(det.instance_id, 255)
-            instance_mask[det.mask.astype(bool)] = pixel_value
-        
-        return instance_mask
-
-
 class VideoFrameSegmenter:
     """Process video frames with panoptic segmentation."""
-    
+
     def __init__(self, config_path: str = "config.yaml"):
-        with open(config_path, 'r') as f:
-            self.config = yaml.safe_load(f)
-        
+        self.config = load_config(config_path)
+        merge_global_config(self.config, Path(__file__).resolve().parent)
+
         self.model = YOLOPanopticSegmenter(self.config)
-        self.visualizer = PanopticVisualizer(self.config)
-        
-        # Initialize tracker if enabled
+        self.visualizer = Visualizer.from_config(self.config, get_colors(self.config))
         self.use_tracking = self.config.get('tracking', {}).get('enabled', False)
-        self.tracker = SimpleTracker(self.config) if self.use_tracking else None
+        self.tracker = SimpleTracker.from_config(self.config) if self.use_tracking else None
         
         # Sampling settings
         self.frame_interval = self.config['sampling']['frame_interval']

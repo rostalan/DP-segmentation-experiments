@@ -1,29 +1,59 @@
-# Virtual Environments
+# Virtual environments
 venv/
-.env/
+.venv/
 */venv/
 
-# Models and Resources
+# Model weights
 models/
-res/
 *.pt
 *.pth
 *.onnx
+*.tflite
+*.task
+*.torchscript
+*.pb
+*.safetensors
+saved_model/
 *.ts
 
-# Outputs and Logs
+# Input resources
+res/
+
+# Generated outputs
 output/
 */output/
+*/output_*/
+*/output-*/
 runs/
 */runs/
+*.log
+*.ply
+*.npy
+video_sample/sampled_frames/
 
-# Python
+# Python bytecode
 __pycache__/
-*.pyc
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
 
-# IDE
+# Media (input videos)
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+# IDE / editor
 .vscode/
 .idea/
 .cursor/
-terminals/
 
+# OS
+.DS_Store
+Thumbs.db
+
+
+# repos
+omniglue/repo

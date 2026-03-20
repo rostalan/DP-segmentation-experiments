@@ -1,9 +1,7 @@
-# SAM3 Video Segmentation with Interactive Tracking
-# Requires Ultralytics 8.3.237+
-
 opencv-python>=4.8.0
 numpy>=1.24.0,<2.0.0
 PyYAML>=6.0
 torch>=2.0.0
 torchvision>=0.15.0
+transformers>=4.35.0
 ultralytics>=8.3.237

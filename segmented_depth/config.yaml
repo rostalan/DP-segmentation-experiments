@@ -1,0 +1,22 @@
+# Segmented Depth: SAM3 + Depth Anything V2 + masked depth maps
+
+paths:
+  input_video: "../res/videos/VID5.mkv"
+  output_dir: "output"
+
+sampling:
+  frame_interval: 15               # Process every Nth frame (keep small for tracking)
+  start_frame: 30                 # Start frame
+
+sam3:
+  conf_threshold: 0.25
+  device: "cpu"                   # "cpu" or "cuda"
+
+depth_anything:
+  encoder: "vitl"                 # vitl, vitb, vits
+  device: "auto"                  # "auto", "cpu", "cuda"
+
+output:
+  save_rgb: true
+  save_depth: true
+  save_full_depth: true

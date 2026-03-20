@@ -1,47 +1,67 @@
-# DP-App-2: Video Segmentation Experiments
+# DP-App-2
 
-This repository contains various experiments for video segmentation using state-of-the-art models including YOLO-World, SAM 2, SAM 3, FastSAM, YOLOE, and Depth Anything V2.
+Video segmentation experiments and assembly guidance pipelines.
 
 ## Structure
 
-Each folder represents a different experimental approach with its own virtual environment and requirements.
+```
+global_config.yaml       Default settings inherited by all pipelines
+lib/                     Shared code (detection, tracking, visualisation, config, depth, SAM utils)
+models/                  Model weights (gitignored)
+res/                     Input videos and images (gitignored)
+```
 
-### Segmentation Pipelines
-- **`yolo8x-world_sam2/`**: Zero-shot segmentation using YOLO-World for detection and SAM 2 for segmentation. High quality.
-- **`yoloworld-yoloe/`**: Hybrid approach using YOLO-World for open-vocabulary detection and YOLOE for segmentation. Efficient with decent quality.
-- **`yoloe-seg/`**: Instance segmentation using YOLOE with text prompts.
-- **`yolo8x-world_fastsam/`**: YOLO-World detection + FastSAM segmentation for speed.
-- **`sam2-only/`**: Automatic segmentation using SAM 2 (without text prompts).
-- **`sam3/`**: Experiments with SAM 3 (requires access).
-- **`yolo26x-seg/`**: Experiments with YOLO-26x segmentation.
+### Main pipeline
+
+| Folder | Description |
+|--------|-------------|
+| `all-in-one/` | Assembly recording & playback -- YOLO detection, MediaPipe gestures, step-based output |
+
+### Segmentation experiments
+
+| Folder | Approach |
+|--------|----------|
+| `yolo8x-world_sam2/` | YOLO-World + SAM 2 (high quality, built-in tracking) |
+| `yoloworld-yoloe/` | YOLO-World + YOLOE (efficient hybrid) |
+| `yoloe-seg/` | YOLOE text-prompted segmentation |
+| `yolo8x-world_fastsam/` | YOLO-World + FastSAM (fast) |
+| `yolo26x-seg/` | YOLO-26x ONNX panoptic segmentation |
+| `sam2-only/` | SAM 2 automatic segmentation (no detection model) |
+| `sam3/` | SAM 3 interactive video object segmentation |
 
 ### Depth & 3D
-- **`depth-anything/`**: Depth map generation using Depth Anything V2 and point cloud creation.
 
-## Setup
+| Folder | Description |
+|--------|-------------|
+| `depth-anything/` | Depth Anything V2 depth maps + point cloud generation |
+| `segmented_depth/` | SAM 3 + Depth Anything V2 -- per-object depth extraction |
 
-1. **Models**: Place model weights in the `models/` directory (ignored by git).
-   - `yolov8x-worldv2.pt`
-   - `sam2.1_t.pt`
-   - `yoloe-26x-seg.pt`
-   - `depth_anything_v2_vitl.pth`
-   - etc.
+### Utilities
 
-2. **Resources**: Place input videos in `res/videos/` (ignored by git).
+| Folder | Description |
+|--------|-------------|
+| `hand_detection/` | MediaPipe hand landmarks & gesture recognition |
+| `search_img/` | Object search in video (YOLO-World + ResNet similarity) |
+| `img2vid/` | Image sequence to video converter |
+| `video_sample/` | Save video frames via keystroke |
+| `omniglue/` | OmniGlue (CVPR'24) feature matching experiment |
 
-3. **Running an Experiment**:
-   Navigate to the desired folder, set up the environment, and run the script.
-   
-   Example for `yoloworld-yoloe`:
-   ```bash
-   cd yoloworld-yoloe
-   python3 -m venv venv
-   source venv/bin/activate
-   pip install -r requirements.txt
-   python segment_video.py
-   ```
+## Configuration
 
-## Requirements
+`global_config.yaml` defines project-wide defaults: colour palette, model
+paths, device, sampling, tracking, and output settings.  Each folder has a
+local `config.yaml` that only contains overrides -- missing keys are filled
+from the global file automatically via `lib/config.py`.
 
-Each folder contains a `requirements.txt` specific to its dependencies.
+To change a default for all pipelines, edit `global_config.yaml`.  To change
+it for one pipeline, set the key in that folder's `config.yaml`.
 
+## Quick start
+
+```bash
+cd <folder>
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+python <script>.py                   # uses config.yaml
+python <script>.py --config alt.yaml # custom config
+```

@@ -1,75 +1,47 @@
-# Depth Anything V2 Configuration
-# ================================
-# Generates depth maps from video frames
+# Depth Anything V2: depth maps from video frames
 
-# Paths
 paths:
-  model: "../models/depth_anything_v2_vitl.pth"   # ViT-L model
   input_video: "../res/videos/VID1.mkv"
   output_dir: "output/frames"
 
-# Frame Sampling
 sampling:
-  frame_interval: 2            # Process every Nth frame
-  start_frame: 200                # First frame to process
-  max_frames: 30              # Maximum frames to process (null = all)
+  frame_interval: 2               # Process every Nth frame
+  start_frame: 200               # First frame to process
+  max_frames: 30                 # Maximum frames to process (null = all)
 
-# Model Settings
 model:
-  encoder: "vitl"               # vitl, vitb, or vits (must match model file)
-  input_size: 518               # Input size for the model
+  encoder: "vitl"                # vitl, vitb, or vits (must match model file)
+  input_size: 518                # Input size for the model
 
-# Inference Settings
-inference:
-  device: "auto"                # "auto", "cpu", "cuda"
-
-# Output Settings
 output:
-  save_rgb: true                # Save original RGB frames (for point cloud)
-  save_depth_raw: true          # Save raw depth values (16-bit PNG)
-  save_depth_colored: true      # Save colored depth visualization
-  save_depth_grayscale: true    # Save grayscale depth map
-  colormap: "inferno"           # Colormap: inferno, magma, plasma, viridis, jet
-  image_format: "png"           # Output format
+  save_rgb: true
+  save_depth_raw: true
+  save_depth_colored: true
+  save_depth_grayscale: true
+  colormap: "inferno"
 
-# Point Cloud Generation Settings
 pointcloud:
-  # Camera intrinsics for OnePlus Nord CE 2 5G (portrait 1080x1920)
-  focal_length_x: 1600.0        # Focal length X (pixels) - increase if sides visible 500 good
-  focal_length_y: 1600.0        # Focal length Y (pixels) - increase if sides visible
-  principal_point_x: null       # Principal point X (null = image center)
-  principal_point_y: null       # Principal point Y (null = image center)
-  
-  # Depth interpretation
-  depth_scale: 10.0              # Scale normalized depth to meters
-  depth_offset: 20.0             # Push scene further from camera (meters)
-  depth_min: 0.1                # Minimum valid depth - increase to filter bad far estimates
-  depth_max: 50.0               # Maximum valid depth (meters)
-  invert_depth: true            # Invert depth
-  flip_y: false                  # Flip Y axis (image Y-down → 3D Y-up)
-  
-  # Downsampling (reduces point count)
-  downsample: true              # Enable image downsampling before projection
-  downsample_factor: 2          # Factor (2 = half resolution, ~1/4 points)
-  
-  # Optional voxel downsampling (after projection)
-  voxel_size: null              # Voxel size in meters (e.g., 0.01 for 1cm), null = disabled
-  
-  # Outlier removal
-  remove_outliers: false        # Remove statistical outliers
-  outlier_nb_neighbors: 20      # Number of neighbors for outlier detection
-  outlier_std_ratio: 2.0        # Standard deviation ratio threshold
+  focal_length_x: 1600.0
+  focal_length_y: 1600.0
+  principal_point_x: null
+  principal_point_y: null
+  depth_scale: 10.0
+  depth_offset: 20.0
+  depth_min: 0.1
+  depth_max: 50.0
+  invert_depth: true
+  flip_y: false
+  downsample: true
+  downsample_factor: 2
+  voxel_size: null
+  remove_outliers: false
+  outlier_nb_neighbors: 20
+  outlier_std_ratio: 2.0
 
-# Motion Detection Settings
 motion:
-  # Input (null = use consecutive frames from pointclouds folder)
-  pcd1: "output/frames/pointclouds/frame_000200.ply"                    # First point cloud path (or null for auto)
-  pcd2: "output/frames/pointclouds/frame_000202.ply"                    # Second point cloud path (or null for auto)
-  
-  # Detection parameters
-  distance_threshold: 0.25       # Min distance to consider point as moved (meters)
-  
-  # Output
-  output_dir: "output/frames/motion"  # Output directory for motion clouds
-  highlight_color: [1.0, 0.3, 0.0]    # RGB color for moving points (orange)
-  keep_original_colors: false         # Keep original colors instead of highlight
+  pcd1: "output/frames/pointclouds/frame_000200.ply"
+  pcd2: "output/frames/pointclouds/frame_000202.ply"
+  distance_threshold: 0.25
+  output_dir: "output/frames/motion"
+  highlight_color: [1.0, 0.3, 0.0]
+  keep_original_colors: false

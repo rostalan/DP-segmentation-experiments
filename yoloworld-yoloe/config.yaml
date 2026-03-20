@@ -1,68 +1,28 @@
-# YOLO-World + YOLOE Segmentation Pipeline
-# =========================================
-# Uses YOLO-World for open-vocabulary detection + YOLOE for segmentation
-# Best of both: descriptive text prompts + efficient segmentation
+# YOLO-World for open-vocabulary detection + YOLOE for segmentation
 
-# Paths
 paths:
-  yolo_world_model: "../models/yolov8x-worldv2.pt"
-  yoloe_model: "../models/yoloe-26x-seg.pt"
   input_video: "../res/videos/VID1.mkv"
   output_dir: "output/frames"
 
-# Frame Sampling
 sampling:
-  frame_interval: 10            # Process every Nth frame
-  start_frame: 18                # First frame to process
-  max_frames: 50              # Maximum frames to process (null = all)
+  frame_interval: 10
+  start_frame: 18
+  max_frames: 50
 
-# YOLO-World Detection Settings (open-vocabulary)
 yolo_world:
-  confidence_threshold: 0.15    # Lowered confidence to catch hands as "hand"
-  iou_threshold: 0.45           # NMS IoU threshold
-  imgsz: 640                    # Input size
+  confidence_threshold: 0.15
+  iou_threshold: 0.45
+  imgsz: 640
 
-# YOLOE Segmentation Settings
 yoloe:
-  imgsz: 640                    # Input size for segmentation
-  conf: 0.15                    # Confidence for mask generation
+  imgsz: 640
+  conf: 0.15
 
-# Inference Settings
 inference:
-  device: "cpu"                 # "auto", "cpu", "cuda"
+  device: "cpu"
 
-# Custom classes to detect (YOLO-World supports ANY text description!)
 custom_classes:
   - person
   - hand
   - black and white laptop
   - long black laptop battery
-
-# Tracking Settings (optional)
-tracking:
-  enabled: false                # Enable IoU-based tracking
-  iou_threshold: 0.3            # Min IoU to match detection to track
-  max_age: 3                    # Max frames to keep track without detection
-  min_hits: 1                   # Min detections before track is confirmed
-
-# Output Settings
-output:
-  save_overlay: true            # Save RGB with mask overlay
-  save_panoptic_mask: true      # Save colored instance mask
-  save_instance_mask: true      # Save instance ID mask (grayscale)
-  overlay_alpha: 0.5            # Mask overlay transparency (0-1)
-  show_labels: true             # Draw class labels
-  show_confidence: false        # Show confidence scores
-  show_boxes: false             # Draw bounding boxes
-  image_format: "png"           # Output format (png, jpg)
-
-# Colors for visualization (BGR format)
-colors:
-  - [230, 25, 75]     # Red
-  - [60, 180, 75]     # Green
-  - [255, 225, 25]    # Yellow
-  - [0, 130, 200]     # Blue
-  - [245, 130, 48]    # Orange
-  - [145, 30, 180]    # Purple
-  - [70, 240, 240]    # Cyan
-  - [240, 50, 230]    # Magenta

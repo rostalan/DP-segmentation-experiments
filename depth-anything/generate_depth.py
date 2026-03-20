@@ -8,7 +8,6 @@ Uses HuggingFace transformers pipeline for easy inference.
 
 import cv2
 import numpy as np
-import yaml
 from pathlib import Path
 import time
 import warnings
@@ -16,74 +15,10 @@ import torch
 
 warnings.filterwarnings('ignore')
 
-
-class DepthAnythingV2:
-    """Depth Anything V2 depth estimation using HuggingFace transformers."""
-    
-    def __init__(self, config: dict):
-        self.config = config
-        
-        model_cfg = config.get('model', {})
-        self.encoder = model_cfg.get('encoder', 'vitl')
-        
-        # Device
-        device = config['inference']['device']
-        if device == 'auto':
-            device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.device = device
-        
-        # Load model
-        self._load_model()
-        
-        print(f"Depth Anything V2 ({self.encoder}) loaded on: {self.device}")
-    
-    def _load_model(self):
-        """Load Depth Anything V2 model from HuggingFace."""
-        from transformers import AutoImageProcessor, AutoModelForDepthEstimation
-        
-        # Map encoder names to HuggingFace model names
-        model_names = {
-            'vits': 'depth-anything/Depth-Anything-V2-Small-hf',
-            'vitb': 'depth-anything/Depth-Anything-V2-Base-hf',
-            'vitl': 'depth-anything/Depth-Anything-V2-Large-hf',
-        }
-        
-        model_name = model_names.get(self.encoder, model_names['vitl'])
-        print(f"Loading model: {model_name}")
-        
-        self.processor = AutoImageProcessor.from_pretrained(model_name)
-        self.model = AutoModelForDepthEstimation.from_pretrained(model_name)
-        self.model = self.model.to(self.device)
-        self.model.eval()
-    
-    def __call__(self, image: np.ndarray) -> np.ndarray:
-        """Generate depth map from image."""
-        h, w = image.shape[:2]
-        
-        # Convert BGR to RGB
-        img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        
-        # Preprocess
-        inputs = self.processor(images=img_rgb, return_tensors="pt")
-        inputs = {k: v.to(self.device) for k, v in inputs.items()}
-        
-        # Inference
-        with torch.no_grad():
-            outputs = self.model(**inputs)
-            predicted_depth = outputs.predicted_depth
-        
-        # Interpolate to original size
-        depth = torch.nn.functional.interpolate(
-            predicted_depth.unsqueeze(1),
-            size=(h, w),
-            mode="bicubic",
-            align_corners=False,
-        ).squeeze().cpu().numpy()
-        
-        # Normalize to 0-1 range
-        depth = (depth - depth.min()) / (depth.max() - depth.min() + 1e-8)
-        
-        return depth
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from lib.config import load_config, merge_global_config
+from lib.depth import DepthAnythingV2
 
 
 class DepthVisualizer:
@@ -102,7 +37,6 @@ class DepthVisualizer:
         self.colormap = self.colormaps.get(self.colormap_name, cv2.COLORMAP_INFERNO)
     
     def to_colored(self, depth: np.ndarray) -> np.ndarray:
-        """Convert depth map to colored visualization."""
         # Normalize to 0-255
         depth_uint8 = (depth * 255).astype(np.uint8)
         # Apply colormap
@@ -119,13 +53,13 @@ class DepthVisualizer:
 
 
 class VideoProcessor:
-    """Process video with Depth Anything V2."""
-    
     def __init__(self, config_path: str = "config.yaml"):
-        with open(config_path, 'r') as f:
-            self.config = yaml.safe_load(f)
-        
-        self.model = DepthAnythingV2(self.config)
+        self.config = load_config(config_path)
+        merge_global_config(self.config, Path(__file__).resolve().parent)
+        self.model = DepthAnythingV2(
+            encoder=self.config.get('model', {}).get('encoder', 'vitl'),
+            device=self.config.get('inference', {}).get('device', 'auto')
+        )
         self.visualizer = DepthVisualizer(self.config)
         
         self.frame_interval = self.config['sampling']['frame_interval']

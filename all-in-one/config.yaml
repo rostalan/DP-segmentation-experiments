@@ -1,0 +1,43 @@
+# Assembly Recording Pipeline
+
+paths:
+  input_video: "../../res/videos/VID20260201102500.mp4" # disassembly
+  output_dir: "output/steps"
+
+yolo_detection:
+  model_path: "../models/oboe-train-v1-weights.pt"
+  confidence: 0.5
+  iou_threshold: 0.5
+  overlap_iou_threshold: 0.3
+
+stillness:
+  threshold: 3.0
+  still_frames_required: 15
+  still_timeout: 120
+  scale: 0.25
+
+hands:
+  model_path: "../models/hand_landmarker.task"
+  detect_interval: 3
+  absent_checks_required: 5
+  min_confidence: 0.3
+  resolution: [640, 480]
+
+display:
+  enabled: true
+  scale: 0.8
+
+gestures:
+  enabled: true
+  model_path: "../models/gesture_recognizer.task"
+  detect_interval: 2
+  hold_detections: 5
+  cooldown_detections: 8
+  min_confidence: 0.55
+  resolution: [640, 480]
+
+playback:
+  guide_path: "output/steps/guide.json"
+  input: "../../res/videos/VID20260201102500.mp4"   # 0 for webcam, or path to video
+  auto_advance_frames: 30
+  detection_interval: 10

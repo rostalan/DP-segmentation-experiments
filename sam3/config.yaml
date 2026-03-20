@@ -1,68 +1,12 @@
-# YOLO8-World + SAM3 Hybrid Pipeline Configuration
-# ==================================================
-# Uses YOLO8-World for open-vocabulary detection + SAM3 for segmentation
-# Processes frame-by-frame (CPU-friendly, low memory)
+# SAM3 Interactive Video Segmentation Configuration
 
-# Paths
 paths:
-  yolo_model: "../models/yolov8x-worldv2.pt"  # Auto-downloads if not present
-  input_video: "../res/videos/VID1.mkv"
+  input_video: "../res/videos/VID5.mkv"
   output_dir: "output/frames"
 
-# Frame Sampling
 sampling:
-  frame_interval: 15              # Process every Nth frame
-  start_frame: 0                  # First frame to process
-  max_frames: null                # Maximum frames to process (null = all)
+  frame_interval: 10               # Process every frame for best tracking (was 15)
+  start_frame: 10                  # First frame to process
 
-# YOLO8-World Detection Settings (open-vocabulary)
-yolo:
-  confidence_threshold: 0.01      # Minimum confidence for detections
-  iou_threshold: 0.6              # IoU threshold for NMS
-
-# Custom classes to detect (open-vocabulary - can be ANY text!)
-custom_classes:
-  - person
-  - black and white laptop
-  - black laptop battery
-
-# SAM3 Segmentation Settings
-sam3:
-  threshold: 0.5                  # Mask threshold
-  mask_threshold: 0.5             # Binary mask threshold
-
-# Inference Settings
 inference:
-  device: "cpu"                   # "cpu" or "cuda"
-
-# Tracking Settings
-tracking:
-  enabled: true                   # Enable IoU-based tracking
-  iou_threshold: 0.1              # Min IoU to match detection to track
-  max_age: 3                      # Max frames to keep track without detection
-
-# Output Settings
-output:
-  save_overlay: true              # Save RGB with mask overlay
-  save_panoptic_mask: true        # Save panoptic segmentation mask
-  save_instance_mask: true        # Save instance ID mask
-  overlay_alpha: 0.6              # Mask overlay transparency
-  show_labels: true               # Draw class labels
-  show_confidence: false          # Show confidence scores
-  show_track_id: true             # Show track IDs
-  image_format: "png"             # Output format
-
-# Colors for visualization (BGR format)
-colors:
-  - [230, 25, 75]     # Red
-  - [60, 180, 75]     # Green
-  - [255, 225, 25]    # Yellow
-  - [0, 130, 200]     # Blue
-  - [245, 130, 48]    # Orange
-  - [145, 30, 180]    # Purple
-  - [70, 240, 240]    # Cyan
-  - [240, 50, 230]    # Magenta
-  - [210, 245, 60]    # Lime
-  - [250, 190, 212]   # Pink
-  - [0, 128, 128]     # Teal
-  - [220, 190, 255]   # Lavender
+  device: "cpu"                    # "cpu" or "cuda"

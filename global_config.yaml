@@ -1,0 +1,56 @@
+# Global defaults for DP-app-2
+# =============================
+# Local config.yaml files inherit these values.
+# Any key set locally overrides the global default.
+
+colors:  # BGR
+  - [75, 25, 230]     # Red
+  - [75, 180, 60]     # Green
+  - [25, 225, 255]    # Yellow
+  - [200, 130, 0]     # Blue
+  - [48, 130, 245]    # Orange
+  - [180, 30, 145]    # Purple
+  - [240, 240, 70]    # Cyan
+  - [230, 50, 240]    # Magenta
+  - [60, 245, 210]    # Lime
+  - [212, 190, 250]   # Pink
+  - [128, 128, 0]     # Teal
+  - [255, 190, 220]   # Lavender
+
+models:
+  yolo_world: "../models/yolov8x-worldv2.pt"
+  yolo_world_m: "../models/yolov8m-worldv2.pt"
+  sam2: "../models/sam2.1_t.pt"
+  sam2_base: "../models/sam2.1_b.pt"
+  sam3: "../models/sam3.pt"
+  yoloe: "../models/yoloe-26x-seg.pt"
+  yolo26_onnx: "../models/yolo26x-seg.onnx"
+  fastsam_x: "../models/FastSAM-x.pt"
+  depth_anything: "../models/depth_anything_v2_vitl.pth"
+  hand_landmarker: "../models/hand_landmarker.task"
+  gesture_recognizer: "../models/gesture_recognizer.task"
+
+sampling:
+  start_frame: 0
+  max_frames: null
+
+inference:
+  device: "auto"
+  conf_threshold: 0.25
+
+tracking:
+  enabled: false
+  iou_threshold: 0.3
+  max_age: 3
+  min_hits: 1
+
+output:
+  image_format: "png"
+  overlay_alpha: 0.6
+  save_overlay: true
+  save_panoptic_mask: true
+  save_instance_mask: true
+  show_labels: true
+  show_confidence: false
+  show_boxes: false
+  show_track_id: false

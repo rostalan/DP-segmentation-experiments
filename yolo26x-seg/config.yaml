@@ -1,67 +1,27 @@
-# Panoptic Segmentation Configuration
-# ====================================
+# Panoptic segmentation with YOLO26x
 
-# Paths
 paths:
-  model: "../models/yolo26x-seg.onnx"
   input_video: "../res/videos/VID1.mkv"
   output_dir: "output/frames"
 
-# Frame Sampling
 sampling:
-  frame_interval: 12            # Process every Nth frame (30 = ~1 fps for 30fps video)
-  start_frame: 0                # First frame to process
-  max_frames: null              # Maximum frames to process (null = all)
+  frame_interval: 12
 
-# Model Settings
 model:
-  input_size: 640               # Model input resolution (square)
-  confidence_threshold: 0.35    # Minimum confidence for detections
-  iou_threshold: 0.4            # IoU threshold for NMS
-  mask_threshold: 0.5           # Threshold for binary mask
+  input_size: 640
+  confidence_threshold: 0.35
+  iou_threshold: 0.4
+  mask_threshold: 0.5
 
-# Inference Settings
 inference:
-  device: "cpu"                 # "cpu" or "cuda"
+  device: "cpu"
 
-# Tracking Settings (for temporal consistency)
 tracking:
-  enabled: true                 # Enable IoU-based tracking
-  iou_threshold: 0.3            # Min IoU to match detection to track
-  max_age: 3                    # Max frames to keep track without detection
-  min_hits: 1                   # Min detections before track is confirmed
+  enabled: true
 
-# Output Settings
 output:
-  save_overlay: true            # Save RGB with mask overlay
-  save_panoptic_mask: true      # Save panoptic segmentation mask (colored)
-  save_instance_mask: true      # Save instance ID mask (grayscale)
-  overlay_alpha: 0.6            # Mask overlay transparency (0-1)
-  show_labels: false            # Draw class labels
-  show_confidence: false        # Show confidence scores
-  image_format: "png"           # Output format (png, jpg)
+  show_labels: false
 
-# Panoptic Segmentation Colors (BGR)
-# Each instance gets a unique color derived from class color + instance offset
-colors:
-  - [230, 25, 75]     # Red
-  - [60, 180, 75]     # Green
-  - [255, 225, 25]    # Yellow
-  - [0, 130, 200]     # Blue
-  - [245, 130, 48]    # Orange
-  - [145, 30, 180]    # Purple
-  - [70, 240, 240]    # Cyan
-  - [240, 50, 230]    # Magenta
-  - [210, 245, 60]    # Lime
-  - [250, 190, 212]   # Pink
-  - [0, 128, 128]     # Teal
-  - [220, 190, 255]   # Lavender
-  - [170, 110, 40]    # Brown
-  - [255, 250, 200]   # Beige
-  - [128, 0, 0]       # Maroon
-  - [170, 255, 195]   # Mint
-
-# COCO Class Names (80 classes)
 class_names:
   - person
   - bicycle

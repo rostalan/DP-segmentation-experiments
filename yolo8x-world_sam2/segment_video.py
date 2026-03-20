@@ -3,166 +3,21 @@
 Zero-Shot Video Segmentation using YOLO-World + SAM
 ===================================================
 Detect ANY object by text description and generate high-quality segmentation masks.
-
-This approach combines:
-- YOLO-World: Open-vocabulary object detection (detect any class by text)
-- SAM (Segment Anything Model): High-quality mask generation from bounding boxes
 """
+
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import cv2
 import numpy as np
-import yaml
-from pathlib import Path
-from dataclasses import dataclass
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 import time
+from collections import defaultdict, deque
 
-
-@dataclass
-class Detection:
-    """Represents a single detection with mask."""
-    bbox: np.ndarray       # [x1, y1, x2, y2]
-    confidence: float
-    class_id: int
-    class_name: str
-    instance_id: int       # Unique instance ID for panoptic segmentation
-    mask: np.ndarray       # Binary mask at original resolution
-    track_id: int = -1     # Persistent track ID across frames
-
-
-@dataclass 
-class Track:
-    """Represents a tracked object across frames."""
-    track_id: int
-    bbox: np.ndarray
-    class_id: int
-    class_name: str
-    mask: np.ndarray
-    confidence: float
-    age: int = 0           # Frames since track was created
-    hits: int = 1          # Number of frames with detections
-    misses: int = 0        # Consecutive frames without detection
-
-
-class SimpleTracker:
-    """IoU-based tracker for temporal consistency."""
-    
-    def __init__(self, config: dict):
-        tracking_cfg = config.get('tracking', {})
-        self.iou_threshold = tracking_cfg.get('iou_threshold', 0.3)
-        self.max_age = tracking_cfg.get('max_age', 5)
-        self.min_hits = tracking_cfg.get('min_hits', 1)
-        
-        self.tracks: List[Track] = []
-        self.next_track_id = 1
-    
-    def _compute_iou(self, box1: np.ndarray, box2: np.ndarray) -> float:
-        """Compute IoU between two boxes [x1, y1, x2, y2]."""
-        x1 = max(box1[0], box2[0])
-        y1 = max(box1[1], box2[1])
-        x2 = min(box1[2], box2[2])
-        y2 = min(box1[3], box2[3])
-        
-        inter = max(0, x2 - x1) * max(0, y2 - y1)
-        area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
-        area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
-        union = area1 + area2 - inter
-        
-        return inter / union if union > 0 else 0
-    
-    def _compute_iou_matrix(self, detections: List[Detection]) -> np.ndarray:
-        """Compute IoU matrix between tracks and detections."""
-        if not self.tracks or not detections:
-            return np.zeros((len(self.tracks), len(detections)))
-        
-        iou_matrix = np.zeros((len(self.tracks), len(detections)))
-        for i, track in enumerate(self.tracks):
-            for j, det in enumerate(detections):
-                # Only match same class
-                if track.class_id == det.class_id:
-                    iou_matrix[i, j] = self._compute_iou(track.bbox, det.bbox)
-        return iou_matrix
-    
-    def update(self, detections: List[Detection]) -> List[Detection]:
-        """Update tracks with new detections and return tracked detections."""
-        iou_matrix = self._compute_iou_matrix(detections)
-        
-        matched_tracks = set()
-        matched_dets = set()
-        matches = []
-        
-        if iou_matrix.size > 0:
-            while True:
-                max_iou = iou_matrix.max()
-                if max_iou < self.iou_threshold:
-                    break
-                
-                idx = np.unravel_index(iou_matrix.argmax(), iou_matrix.shape)
-                track_idx, det_idx = idx
-                
-                matches.append((track_idx, det_idx))
-                matched_tracks.add(track_idx)
-                matched_dets.add(det_idx)
-                
-                iou_matrix[track_idx, :] = 0
-                iou_matrix[:, det_idx] = 0
-        
-        # Update matched tracks
-        for track_idx, det_idx in matches:
-            track = self.tracks[track_idx]
-            det = detections[det_idx]
-            track.bbox = det.bbox
-            track.mask = det.mask
-            track.confidence = det.confidence
-            track.hits += 1
-            track.misses = 0
-            track.age += 1
-        
-        # Update unmatched tracks
-        num_existing_tracks = len(self.tracks)
-        for track_idx in range(num_existing_tracks):
-            if track_idx not in matched_tracks:
-                self.tracks[track_idx].misses += 1
-                self.tracks[track_idx].age += 1
-        
-        # Create new tracks for unmatched detections
-        for det_idx, det in enumerate(detections):
-            if det_idx not in matched_dets:
-                new_track = Track(
-                    track_id=self.next_track_id,
-                    bbox=det.bbox,
-                    class_id=det.class_id,
-                    class_name=det.class_name,
-                    mask=det.mask,
-                    confidence=det.confidence
-                )
-                self.tracks.append(new_track)
-                self.next_track_id += 1
-        
-        # Remove dead tracks
-        self.tracks = [t for t in self.tracks if t.misses <= self.max_age]
-        
-        # Build output detections
-        output_detections = []
-        for track in self.tracks:
-            if track.hits >= self.min_hits:
-                adjusted_conf = track.confidence * (0.9 ** track.misses)
-                output_detections.append(Detection(
-                    bbox=track.bbox,
-                    confidence=adjusted_conf,
-                    class_id=track.class_id,
-                    class_name=track.class_name,
-                    instance_id=track.track_id,
-                    mask=track.mask,
-                    track_id=track.track_id
-                ))
-        
-        return output_detections
-    
-    def reset(self):
-        """Reset tracker state."""
-        self.tracks = []
-        self.next_track_id = 1
+from lib.detection import Detection
+from lib.visualizer import Visualizer
+from lib.config import load_config, merge_global_config, get_colors
 
 
 class YOLOWorldSAMSegmenter:
@@ -174,33 +29,28 @@ class YOLOWorldSAMSegmenter:
         self.conf_thresh = config['yolo']['confidence_threshold']
         self.iou_thresh = config['yolo']['iou_threshold']
         
-        # Determine device
+        tracking_cfg = config.get('tracking', {})
+        self.tracking_enabled = tracking_cfg.get('enabled', False)
+        self.tracker_type = tracking_cfg.get('tracker_type', 'bytetrack.yaml')
+        self.persist = tracking_cfg.get('persist', True)
+        
         device = config['inference']['device']
         if device == 'auto':
             import torch
-            if torch.cuda.is_available():
-                device = 'cuda'
-            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-                device = 'mps'
-            else:
-                device = 'cpu'
+            if torch.cuda.is_available(): device = 'cuda'
+            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available(): device = 'mps'
+            else: device = 'cpu'
         self.device = device
         
-        # Import ultralytics here to avoid import errors if not installed
         from ultralytics import YOLOWorld, SAM
         
-        # Load YOLO-World model
-        yolo_path = config['paths']['yolo_model']
+        yolo_path = config['paths']['yolo_world']
         print(f"Loading YOLO-World model: {yolo_path}")
         self.yolo = YOLOWorld(yolo_path)
         self.yolo.to(self.device)
-        
-        # Set custom classes for zero-shot detection
-        print(f"Setting custom classes: {self.class_names}")
         self.yolo.set_classes(self.class_names)
         
-        # Load SAM model
-        sam_path = config['paths']['sam_model']
+        sam_path = config['paths']['sam2']
         print(f"Loading SAM model: {sam_path}")
         self.sam = SAM(sam_path)
         self.sam.to(self.device)
@@ -208,160 +58,123 @@ class YOLOWorldSAMSegmenter:
         print(f"Models loaded on device: {self.device}")
     
     def __call__(self, image: np.ndarray) -> List[Detection]:
-        """Run zero-shot segmentation on an image."""
-        # Run YOLO-World detection
-        yolo_results = self.yolo.predict(
-            image,
-            conf=self.conf_thresh,
-            iou=self.iou_thresh,
-            verbose=False
-        )
+        if self.tracking_enabled:
+            yolo_results = self.yolo.track(
+                image,
+                persist=self.persist,
+                tracker=self.tracker_type,
+                conf=self.conf_thresh,
+                iou=self.iou_thresh,
+                verbose=False
+            )
+        else:
+            yolo_results = self.yolo.predict(
+                image,
+                conf=self.conf_thresh,
+                iou=self.iou_thresh,
+                verbose=False
+            )
         
         if len(yolo_results) == 0 or len(yolo_results[0].boxes) == 0:
             return []
         
         result = yolo_results[0]
-        boxes = result.boxes.xyxy.cpu().numpy()  # [N, 4]
-        confidences = result.boxes.conf.cpu().numpy()  # [N]
-        class_ids = result.boxes.cls.cpu().numpy().astype(int)  # [N]
+        boxes = result.boxes.xyxy.cpu().numpy()
+        confidences = result.boxes.conf.cpu().numpy()
+        class_ids = result.boxes.cls.cpu().numpy().astype(int)
+        
+        track_ids = None
+        if result.boxes.id is not None:
+            track_ids = result.boxes.id.int().cpu().numpy()
         
         if len(boxes) == 0:
             return []
         
-        # Run SAM to generate masks from boxes
         sam_results = self.sam.predict(
             image,
             bboxes=boxes,
             verbose=False
         )
         
-        # Build detections
         detections = []
         masks = sam_results[0].masks
         
         if masks is None:
-            # Fallback: create box masks if SAM fails
             h, w = image.shape[:2]
             for i, (box, conf, cls_id) in enumerate(zip(boxes, confidences, class_ids)):
-                x1, y1, x2, y2 = map(int, box)
                 mask = np.zeros((h, w), dtype=np.uint8)
+                x1, y1, x2, y2 = map(int, box)
                 mask[y1:y2, x1:x2] = 1
                 
-                detections.append(Detection(
-                    bbox=box,
-                    confidence=float(conf),
-                    class_id=int(cls_id),
-                    class_name=self.class_names[cls_id] if cls_id < len(self.class_names) else f"class_{cls_id}",
-                    instance_id=i + 1,
-                    mask=mask
-                ))
-        else:
-            masks_data = masks.data.cpu().numpy()  # [N, H, W]
-            
-            for i, (box, conf, cls_id, mask) in enumerate(zip(boxes, confidences, class_ids, masks_data)):
-                # Convert mask to uint8
-                binary_mask = (mask > 0.5).astype(np.uint8)
+                tid = int(track_ids[i]) if track_ids is not None else -1
                 
                 detections.append(Detection(
                     bbox=box,
                     confidence=float(conf),
+                    mask=mask,
                     class_id=int(cls_id),
                     class_name=self.class_names[cls_id] if cls_id < len(self.class_names) else f"class_{cls_id}",
-                    instance_id=i + 1,
-                    mask=binary_mask
+                    instance_id=tid if tid != -1 else (i + 1),
+                    track_id=tid
+                ))
+        else:
+            masks_data = masks.data.cpu().numpy()
+            
+            for i, (box, conf, cls_id, mask) in enumerate(zip(boxes, confidences, class_ids, masks_data)):
+                binary_mask = (mask > 0.5).astype(np.uint8)
+                tid = int(track_ids[i]) if track_ids is not None else -1
+                
+                detections.append(Detection(
+                    bbox=box,
+                    confidence=float(conf),
+                    mask=binary_mask,
+                    class_id=int(cls_id),
+                    class_name=self.class_names[cls_id] if cls_id < len(self.class_names) else f"class_{cls_id}",
+                    instance_id=tid if tid != -1 else (i + 1),
+                    track_id=tid
                 ))
         
         return detections
 
 
-class PanopticVisualizer:
-    """Generate panoptic segmentation visualizations."""
-    
-    def __init__(self, config: dict):
-        self.colors = [tuple(c) for c in config.get('colors', [(255, 0, 0)])]
-        self.alpha = config['output']['overlay_alpha']
-        self.show_labels = config['output']['show_labels']
-        self.show_confidence = config['output']['show_confidence']
-        self.class_names = config.get('class_names', [])
-    
-    def _get_instance_color(self, class_id: int, instance_id: int) -> Tuple[int, int, int]:
-        """Generate unique color for each instance."""
-        base_color = self.colors[class_id % len(self.colors)]
-        offset = (instance_id * 37) % 60 - 30
-        return tuple(max(0, min(255, c + offset)) for c in base_color)
-    
-    def create_overlay(self, image: np.ndarray, detections: List[Detection]) -> np.ndarray:
-        """Create RGB image with mask overlay and labels."""
-        output = image.copy()
-        overlay = image.copy()
-        
-        for det in detections:
-            color = self._get_instance_color(det.class_id, det.instance_id)
-            mask_bool = det.mask.astype(bool)
-            overlay[mask_bool] = color
-            
-            if self.show_labels:
-                x1, y1 = int(det.bbox[0]), int(det.bbox[1])
-                label = f"{det.class_name}: {det.confidence:.2f}" if self.show_confidence else det.class_name
-                
-                (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-                cv2.rectangle(output, (x1, y1 - th - 6), (x1 + tw + 4, y1), color, -1)
-                cv2.putText(output, label, (x1 + 2, y1 - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        
-        return cv2.addWeighted(overlay, self.alpha, output, 1 - self.alpha, 0)
-    
-    def create_panoptic_mask(self, shape: Tuple[int, int], detections: List[Detection]) -> np.ndarray:
-        """Create colored panoptic segmentation mask."""
-        h, w = shape
-        panoptic = np.zeros((h, w, 3), dtype=np.uint8)
-        
-        sorted_dets = sorted(detections, key=lambda d: d.mask.sum(), reverse=True)
-        
-        for det in sorted_dets:
-            color = self._get_instance_color(det.class_id, det.instance_id)
-            panoptic[det.mask.astype(bool)] = color
-        
-        return panoptic
-    
-    def create_instance_mask(self, shape: Tuple[int, int], detections: List[Detection]) -> np.ndarray:
-        """Create instance ID mask (each instance has unique grayscale value)."""
-        h, w = shape
-        instance_mask = np.zeros((h, w), dtype=np.uint16)
-        
-        sorted_dets = sorted(detections, key=lambda d: d.mask.sum(), reverse=True)
-        
-        for det in sorted_dets:
-            pixel_value = min(det.class_id, 255) * 256 + min(det.instance_id, 255)
-            instance_mask[det.mask.astype(bool)] = pixel_value
-        
-        return instance_mask
+def _track_color(track_id: int, colors: list) -> Tuple[int, int, int]:
+    base = colors[track_id % len(colors)]
+    offset = (track_id * 37) % 60 - 30
+    return tuple(max(0, min(255, c + offset)) for c in base)
+
+
+def draw_track_trails(image: np.ndarray, track_history: dict, colors: list, trail_thickness: int = 2) -> np.ndarray:
+    output = image.copy()
+    for track_id, points in track_history.items():
+        if len(points) < 2:
+            continue
+        color = _track_color(track_id, colors)
+        for i in range(1, len(points)):
+            cv2.line(output, points[i - 1], points[i], color, trail_thickness)
+    return output
 
 
 class VideoFrameSegmenter:
-    """Process video frames with zero-shot segmentation."""
-    
     def __init__(self, config_path: str = "config.yaml"):
-        with open(config_path, 'r') as f:
-            self.config = yaml.safe_load(f)
-        
+        script_dir = Path(__file__).resolve().parent
+        self.config = load_config(config_path)
+        merge_global_config(self.config, script_dir)
+        colors = get_colors(self.config)
+
         self.model = YOLOWorldSAMSegmenter(self.config)
-        self.visualizer = PanopticVisualizer(self.config)
+        self.visualizer = Visualizer.from_config(self.config, colors)
+        self.colors = [tuple(c) for c in colors]
         
-        # Initialize tracker if enabled
-        self.use_tracking = self.config.get('tracking', {}).get('enabled', False)
-        self.tracker = SimpleTracker(self.config) if self.use_tracking else None
-        
-        # Sampling settings
         self.frame_interval = self.config['sampling']['frame_interval']
         self.start_frame = self.config['sampling']['start_frame']
         self.max_frames = self.config['sampling'].get('max_frames')
+        self.track_history = defaultdict(lambda: deque(maxlen=50))
+        self.trail_thickness = 2
     
     def process(self):
-        """Process video and save individual frames."""
         input_path = Path(self.config['paths']['input_video'])
         output_dir = Path(self.config['paths']['output_dir'])
         
-        # Create output subdirectories
         dirs = {}
         if self.config['output']['save_overlay']:
             dirs['overlay'] = output_dir / "overlay"
@@ -373,7 +186,6 @@ class VideoFrameSegmenter:
             dirs['instance'] = output_dir / "instance"
             dirs['instance'].mkdir(parents=True, exist_ok=True)
         
-        # Open video
         cap = cv2.VideoCapture(str(input_path))
         if not cap.isOpened():
             raise ValueError(f"Could not open video: {input_path}")
@@ -385,48 +197,35 @@ class VideoFrameSegmenter:
         
         print(f"\nInput: {input_path}")
         print(f"Resolution: {width}x{height}, FPS: {fps:.2f}, Total frames: {total_frames}")
-        print(f"Sampling: every {self.frame_interval} frames (starting at {self.start_frame})")
-        print(f"Classes to detect: {self.config.get('class_names', [])}")
         
-        # Calculate frames to process
         frames_to_process = list(range(self.start_frame, total_frames, self.frame_interval))
         if self.max_frames:
             frames_to_process = frames_to_process[:self.max_frames]
         
         print(f"Frames to process: {len(frames_to_process)}")
-        print(f"Output directory: {output_dir}")
-        if self.use_tracking:
-            print("Tracking: ENABLED (temporal consistency)")
-        print()
         
         img_fmt = self.config['output']['image_format']
         start_time = time.time()
         processed = 0
         
-        # Reset tracker for new video
-        if self.tracker:
-            self.tracker.reset()
-        
         for frame_idx in frames_to_process:
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
             ret, frame = cap.read()
+            if not ret: continue
             
-            if not ret:
-                print(f"Warning: Could not read frame {frame_idx}")
-                continue
-            
-            # Run zero-shot segmentation
             detections = self.model(frame)
             
-            # Apply tracking for temporal consistency
-            if self.tracker:
-                detections = self.tracker.update(detections)
-            
-            # Generate and save outputs
+            for det in detections:
+                if det.track_id == -1: continue
+                x1, y1, x2, y2 = det.bbox.astype(int)
+                cx, cy = int((x1 + x2) / 2), int((y1 + y2) / 2)
+                self.track_history[det.track_id].append((cx, cy))
+
             frame_name = f"frame_{frame_idx:06d}"
             
             if 'overlay' in dirs:
                 overlay = self.visualizer.create_overlay(frame, detections)
+                overlay = draw_track_trails(overlay, self.track_history, self.colors, self.trail_thickness)
                 cv2.imwrite(str(dirs['overlay'] / f"{frame_name}.{img_fmt}"), overlay)
             
             if 'panoptic' in dirs:
@@ -436,17 +235,26 @@ class VideoFrameSegmenter:
             if 'instance' in dirs:
                 instance = self.visualizer.create_instance_mask(frame.shape[:2], detections)
                 cv2.imwrite(str(dirs['instance'] / f"{frame_name}.png"), instance)
+
+            frame_obj_dir = output_dir / frame_name
+            frame_obj_dir.mkdir(parents=True, exist_ok=True)
+            for obj_idx, det in enumerate(detections):
+                mask_bool = det.mask.astype(bool)
+                obj_img = np.zeros_like(frame)
+                obj_img[mask_bool] = frame[mask_bool]
+                safe_class = det.class_name.replace(" ", "_").replace("/", "_")
+                obj_name = f"obj_{obj_idx:02d}_{safe_class}"
+                if det.track_id != -1: obj_name += f"_{det.track_id}"
+                cv2.imwrite(str(frame_obj_dir / f"{obj_name}.{img_fmt}"), obj_img)
             
             processed += 1
-            
-            # Progress
             elapsed = time.time() - start_time
             fps_actual = processed / elapsed if elapsed > 0 else 0
-            print(f"Frame {frame_idx:6d} | Detections: {len(detections):3d} | "
-                  f"Progress: {processed}/{len(frames_to_process)} | FPS: {fps_actual:.2f}")
+            class_names = sorted({det.class_name for det in detections})
+            class_str = ", ".join(class_names) if class_names else "none"
+            print(f"Frame {frame_idx:6d} | Dets: {len(detections):3d} | Classes: {class_str} | FPS: {fps_actual:.2f}")
         
         cap.release()
-        
         elapsed = time.time() - start_time
         print(f"\nComplete! Processed {processed} frames in {elapsed:.1f}s")
         print(f"Outputs saved to: {output_dir}")
@@ -454,13 +262,9 @@ class VideoFrameSegmenter:
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Zero-Shot Video Segmentation (YOLO-World + SAM)")
-    parser.add_argument("--config", "-c", default="config.yaml", help="Config file path")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", "-c", default="config.yaml")
     args = parser.parse_args()
-    
-    print("=" * 60)
-    print("Zero-Shot Video Segmentation (YOLO-World + SAM)")
-    print("=" * 60)
     
     segmenter = VideoFrameSegmenter(args.config)
     segmenter.process()
@@ -468,4 +272,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

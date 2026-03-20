@@ -1,0 +1,19 @@
+# Object Search Configuration
+
+paths:
+  reference_image: "res/search/obj_01_yellow_plastic_box_2.png"
+  input_video: "../res/videos/VID2.mkv"
+  output_dir: "output"
+
+search:
+  confidence_threshold: 0.05
+  iou_threshold: 0.45
+  similarity_threshold: 0.60
+
+sampling:
+  frame_interval: 10
+
+output:
+  save_video: false
+  save_frames: true
+  video_name: "output_search.mp4"
